@@ -1,13 +1,27 @@
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
-import requests
+import google.generativeai as genai
+from dotenv import load_dotenv
 import os
+
+# Load .env
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+# Gemini config
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+genai.configure(api_key=GEMINI_API_KEY)
+
+model = genai.GenerativeModel(
+    model_name="gemini-1.5-flash",
+    system_instruction=(
+        "Bạn là chatbot hỗ trợ học tập cho học sinh THCS Việt Nam. "
+        "Trả lời bằng tiếng Việt, rõ ràng, dễ hiểu, đúng chương trình SGK. "
+        "Không lan man, không dùng từ ngữ người lớn."
+    )
+)
 
 @app.route("/")
 def index():
@@ -21,32 +35,17 @@ def chat():
 
     user_input = data_json["message"]
 
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "model": "llama-3.1-8b-instant",
-        "messages": [
-            {"role": "system", "content": "Bạn là chatbot giúp người dùng phân tích bài văn bằng tiếng Việt."},
-            {"role": "user", "content": user_input}
-        ],
-        "temperature": 0.7,
-        "max_tokens": 512
-    }
-
     try:
-        res = requests.post(GROQ_API_URL, headers=headers, json=payload)
-        res.raise_for_status()
-        result = res.json()
+        response = model.generate_content(user_input)
         return jsonify({
-            "reply": result["choices"][0]["message"]["content"]
+            "reply": response.text
         })
     except Exception as e:
-        print("❌ GROQ ERROR:", e)
-        return jsonify({"reply": "❌ Lỗi gọi Groq API"})
+        print("❌ GEMINI ERROR:", e)
+        return jsonify({
+            "reply": "❌ Lỗi Gemini API"
+        }), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=True)
